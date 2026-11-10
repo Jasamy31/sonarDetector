@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Near-Ultrasound Acoustic Sonar & Doppler Lab</title>
+    <!-- Tailwind CSS for UI layout -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            background-color: #080c14;
+            color: #d1d5db;
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+        }
+        /* Glowing neon utilities for SDR / Sonar cyber aesthetic */
+        .glow-cyan {
+            box-shadow: 0 0 15px rgba(6, 182, 212, 0.35);
+        }
+        .glow-green {
+            box-shadow: 0 0 15px rgba(16, 185, 129, 0.35);
+        }
+        .text-glow-cyan {
+            text-shadow: 0 0 8px rgba(6, 182, 212, 0.6);
+        }
+        .text-glow-green {
+            text-shadow: 0 0 8px rgba(16, 185, 129, 0.6);
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 3px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #334155;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col justify-between p-3 md:p-6">
+
+    <!-- Top Navigation / Header -->
+    <header class="mb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center pb-4 border-b border-cyan-900/50 gap-3">
+        <div class="flex items-center space-x-3">
+            <div class="p-2 bg-cyan-950 border border-cyan-500/40 rounded-lg text-cyan-400 glow-cyan">
+                <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6 animate-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4.9 19.1C1 15.2 1 8.8 4.9 4.9"/><path d="M7.8 16.2c-2.3-2.3-2.3-6.1 0-8.5"/><circle cx="12" cy="12" r="2"/><path d="M16.2 7.8c2.3 2.3 2.3 6.1 0 8.5"/><path d="M19.1 4.9c3.9 3.9 3.9 10.3 0 14.2"/></svg>
+            </div>
+            <div>
+                <h1 class="text-xl font-bold tracking-wider text-cyan-400 text-glow-cyan flex items-center gap-2">
+                    ULTRASONIC SONAR & DOPPLER LAB
+                    <span class="text-xs font-normal px-2 py-0.5 bg-cyan-950 text-cyan-300 border border-cyan-700/50 rounded-full">18-22 kHz</span>
+                </h1>
+                <p class="text-xs text-slate-400">Near-Ultrasound Acoustic Sensing & Micro-Doppler Shift Analyzer</p>
+            </div>
+        </div>
+
+        <!-- System Audio Status Badge -->
+        <div id="audio-status-badge" class="flex items-center space-x-2 text-xs bg-slate-900 border border-slate-700/60 px-3 py-1.5 rounded-md text-slate-400">
+            <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-ping"></span>
+            <span id="status-text">Audio Engine Idle</span>
+            <span class="text-slate-600">|</span>
+            <span id="sr-display">SR: -- kHz</span>
+        </div>
+    </header>
+
+    <!-- Main Dashboard Grid -->
+    <main class="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-grow">
+
+        <!-- Left Controls Column (4 cols) -->
+        <div class="lg:col-span-4 flex flex-col gap-4">
+
+            <!-- Hardware & Audio Context Setup -->
+            <section class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 flex flex-col justify-between backdrop-blur">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77 0"/></svg> Audio Context Control
+                    </h2>
+                    <span id="context-state" class="text-xs font-mono text-slate-500">CLOSED</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                    <button id="btn-start-audio" class="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-slate-950 font-bold rounded-lg transition-all text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-cyan-950">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 fill-current" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></svg> START SYSTEM
+                    </button>
+                    <button id="btn-stop-audio" disabled class="px-4 py-2.5 bg-slate-800 text-slate-500 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-not-allowed">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 fill-current" viewBox="0 0 24 24"><rect x="6" y="6" width="12" height="12"/></svg> STOP
+                    </button>
+                </div>
+            </section>
+
+            <!-- 1. High-Frequency Transmitter (Tone Emitter) -->
+            <section class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 backdrop-blur flex flex-col gap-4">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg> Ultrasonic Emitter
+                    </h2>
+                    <span id="emitter-badge" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700 font-mono">OFF</span>
+                </div>
+
+                <!-- Frequency Slider -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-xs text-slate-400">Carrier Frequency</label>
+                        <span id="freq-display" class="text-lg font-mono font-bold text-cyan-400 text-glow-cyan">20,000 Hz</span>
+                    </div>
+                    <input type="range" id="freq-slider" min="18000" max="22000" step="50" value="20000" class="w-full accent-cyan-400 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                    <div class="flex justify-between text-[10px] text-slate-500 font-mono mt-1">
+                        <span>18.0 kHz</span>
+                        <span>20.0 kHz</span>
+                        <span>22.0 kHz</span>
+                    </div>
+                </div>
+
+                <!-- Amplitude Slider -->
+                <div>
+                    <div class="flex justify-between items-center mb-1">
+                        <label class="text-xs text-slate-400">Output Gain</label>
+                        <span id="gain-display" class="text-xs font-mono text-slate-300">50%</span>
+                    </div>
+                    <input type="range" id="gain-slider" min="0" max="100" value="50" class="w-full accent-cyan-400 bg-slate-800 h-2 rounded-lg cursor-pointer">
+                </div>
+
+                <!-- Mode Selector (Continuous Tone vs Sonar Chirp) -->
+                <div class="grid grid-cols-2 gap-2 pt-1">
+                    <button id="btn-mode-tone" class="py-2 bg-cyan-950 border border-cyan-500/50 text-cyan-300 text-xs font-medium rounded-lg text-center font-mono">
+                        CONTINUOUS TONE
+                    </button>
+                    <button id="btn-mode-chirp" class="py-2 bg-slate-800 border border-slate-700 text-slate-400 text-xs font-medium rounded-lg text-center font-mono hover:border-slate-600">
+                        SONAR CHIRP PING
+                    </button>
+                </div>
+
+                <!-- Toggle Emitter -->
+                <button id="btn-toggle-emitter" disabled class="w-full py-2.5 bg-slate-800 text-slate-500 font-bold rounded-lg text-xs flex items-center justify-center gap-2 cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 10a7 7 0 0 1 14 0"/><path d="M8 14a4 4 0 0 1 8 0"/><circle cx="12" cy="17" r="1"/></svg> TOGGLE EMITTER
+                </button>
+            </section>
+
+            <!-- 3. Real-Time Motion & Doppler Shift Detector -->
+            <section class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 backdrop-blur flex flex-col gap-3">
+                <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+                    <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg> Doppler Motion Sensing
+                    </h2>
+                    <span id="doppler-status" class="text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-500 font-mono">STANDBY</span>
+                </div>
+
+                <!-- Motion Visual Meter -->
+                <div class="flex flex-col gap-1">
+                    <div class="flex justify-between text-xs font-mono">
+                        <span class="text-slate-400">Perturbation Energy</span>
+                        <span id="doppler-energy-text" class="text-emerald-400">0.00 dB</span>
+                    </div>
+                    <div class="w-full bg-slate-950 h-3 rounded-full overflow-hidden border border-slate-800 relative">
+                        <div id="doppler-energy-bar" class="h-full bg-gradient-to-r from-emerald-600 via-cyan-400 to-amber-400 w-0 transition-all duration-75"></div>
+                    </div>
+                </div>
+
+                <!-- Detected Velocity / Vector Indicator -->
+                <div class="grid grid-cols-2 gap-2 mt-1">
+                    <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 flex flex-col items-center justify-center">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-wider font-mono">Frequency Shift</span>
+                        <span id="doppler-shift-hz" class="text-base font-mono font-bold text-slate-300">0 Hz</span>
+                    </div>
+                    <div class="bg-slate-950 p-2.5 rounded-lg border border-slate-800 flex flex-col items-center justify-center">
+                        <span class="text-[10px] text-slate-500 uppercase tracking-wider font-mono">Direction Estimate</span>
+                        <span id="doppler-direction" class="text-xs font-mono font-bold text-slate-400">--</span>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Right Displays & Diagnostics Column (8 cols) -->
+        <div class="lg:col-span-8 flex flex-col gap-4">
+
+            <!-- Visualizer Container -->
+            <div class="bg-slate-900/90 border border-slate-800 rounded-xl p-4 flex flex-col gap-4 backdrop-blur shadow-2xl">
+
+                <!-- 1. Waterfall Spectrogram (18 kHz - 22 kHz Focus) -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6c.6.5 1.2 1 2.5 1C7 7 7 5 9.5 5c2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 12c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/><path d="M2 18c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 2.6 0 2.4 2 5 2 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></svg>
+                            <h3 class="text-xs font-bold text-slate-200 tracking-wider font-mono">WATERFALL SPECTROGRAM (18 kHz - 22 kHz)</h3>
+                        </div>
+                        <div class="text-[10px] text-slate-400 font-mono flex gap-3">
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 bg-cyan-400 inline-block rounded-full"></span> Target Bin</span>
+                            <span class="flex items-center gap-1"><span class="w-2 h-2 bg-amber-400 inline-block rounded-full"></span> Peak Refl</span>
+                        </div>
+                    </div>
+                    <div class="relative w-full h-48 bg-slate-950 rounded-lg overflow-hidden border border-slate-800">
+                        <canvas id="spectrogram-canvas" class="w-full h-full block"></canvas>
+                        <!-- Grid Overlay -->
+                        <div class="absolute inset-0 pointer-events-none flex flex-col justify-between p-1 opacity-30 text-[9px] font-mono text-cyan-300">
+                            <div class="border-b border-cyan-500/30 w-full pt-0.5">22.0 kHz</div>
+                            <div class="border-b border-cyan-500/30 w-full">20.0 kHz</div>
+                            <div class="w-full">18.0 kHz</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 2. High-Frequency Spectrum Bar Graph -->
+                <div>
+                    <div class="flex justify-between items-center mb-2">
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20V10"/><path d="M18 20V4"/><path d="M6 20v-4"/></svg>
+                            <h3 class="text-xs font-bold text-slate-200 tracking-wider font-mono">LIVE HIGH-FREQUENCY SPECTRUM BARS</h3>
+                        </div>
+                        <span id="peak-freq-readout" class="text-xs font-mono text-emerald-400">Peak: 0 Hz</span>
+                    </div>
+                    <div class="w-full h-36 bg-slate-950 rounded-lg overflow-hidden border border-slate-800 relative">
+                        <canvas id="spectrum-canvas" class="w-full h-full block"></canvas>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Diagnostics Console & Physics Warnings -->
+            <div class="bg-slate-900/80 border border-slate-800 rounded-xl p-4 backdrop-blur flex flex-col gap-2">
+                <h3 class="text-xs font-bold text-slate-300 font-mono flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></svg> DIAGNOSTICS & SYSTEM CONSOLE
+                </h3>
+                
+                <!-- Log Container -->
+                <div id="diagnostic-log" class="bg-slate-950 p-3 rounded-lg border border-slate-800 h-24 overflow-y-auto text-[11px] font-mono text-slate-400 space-y-1">
+                    <div class="text-cyan-400">[SYSTEM] Initialization complete. Click "START SYSTEM" to grant mic & audio permissions.</div>
+                </div>
+
+                <!-- Hardware Warning Note -->
+                <div class="mt-1 p-2 bg-amber-950/30 border border-amber-800/40 rounded-lg flex items-start gap-2 text-[11px] text-amber-300/90">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 text-amber-400 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                    <div>
+                        <strong class="text-amber-300">Hardware Physics Warning:</strong> Standard smartphone/laptop DACs operate at a 48 kHz sample rate (Nyquist ceiling at 24 kHz). Built-in anti-aliasing low-pass filters cause significant attenuation above 20.5 kHz. High frequencies may be faint or inaudible to pets/humans.
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-4 pt-3 border-t border-slate-800 flex flex-col sm:flex-row justify-between items-center text-[11px] text-slate-500 gap-2 font-mono">
+        <div>Web Audio API Near-Ultrasound Sensing Engine</div>
+        <div>Continuous FFT Window: 4096 bins (~11.7 Hz/bin resolution)</div>
+    </footer>
+
+    <!-- Application JavaScript Engine -->
+    <script>
+        // State Management
+        const state = {
+            audioCtx: null,
+            micStream: null,
+            micSource: null,
+            analyserNode: null,
+            oscillatorNode: null,
+            gainNode: null,
+            isAudioRunning: false,
+            isEmitterActive: false,
+            emitterMode: 'tone', // 'tone' or 'chirp'
+            targetFreq: 20000,
+            targetGain: 0.5,
+            sampleRate: 48000,
+            fftSize: 4096,
+            chirpTimer: null,
+            // Doppler detection state
+            baseTargetBin: 0,
+            prevBaselineEnergy: 0,
+            smoothingAlpha: 0.8
+        };
+
+        // UI DOM Element Cache
+        const dom = {
+            btnStart: document.getElementById('btn-start-audio'),
+            btnStop: document.getElementById('btn-stop-audio'),
+            btnToggleEmitter: document.getElementById('btn-toggle-emitter'),
+            btnModeTone: document.getElementById('btn-mode-tone'),
+            btnModeChirp: document.getElementById('btn-mode-chirp'),
+            freqSlider: document.getElementById('freq-slider'),
+            freqDisplay: document.getElementById('freq-display'),
+            gainSlider: document.getElementById('gain-slider'),
+            gainDisplay: document.getElementById('gain-display'),
+            contextState: document.getElementById('context-state'),
+            statusBadgeText: document.getElementById('status-text'),
+            srDisplay: document.getElementById('sr-display'),
+            emitterBadge: document.getElementById('emitter-badge'),
+            dopplerStatus: document.getElementById('doppler-status'),
+            dopplerEnergyText: document.getElementById('doppler-energy-text'),
+            dopplerEnergyBar: document.getElementById('doppler-energy-bar'),
+            dopplerShiftHz: document.getElementById('doppler-shift-hz'),
+            dopplerDirection: document.getElementById('doppler-direction'),
+            peakFreqReadout: document.getElementById('peak-freq-readout'),
+            spectrogramCanvas: document.getElementById('spectrogram-canvas'),
+            spectrumCanvas: document.getElementById('spectrum-canvas'),
+            logContainer: document.getElementById('diagnostic-log')
+        };
+
+        // Canvas Contexts & Offscreen Buffers
+        const specCtx = dom.spectrogramCanvas.getContext('2d');
+        const specCanvasOffscreen = document.createElement('canvas');
+        const specCtxOffscreen = specCanvasOffscreen.getContext('2d');
+        const spectBarCtx = dom.spectrumCanvas.getContext('2d');
+
+        // Log Function
+        function logMsg(msg, type = 'info') {
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            const div = document.createElement('div');
+            let colorClass = 'text-slate-400';
+            if (type === 'warn') colorClass = 'text-amber-400';
+            if (type === 'cyan') colorClass = 'text-cyan-400';
+            if (type === 'emerald') colorClass = 'text-emerald-400';
+            if (type === 'error') colorClass = 'text-rose-400';
+
+            div.className = colorClass;
+            div.textContent = `[${time}] ${msg}`;
+            dom.logContainer.appendChild(div);
+            dom.logContainer.scrollTop = dom.logContainer.scrollHeight;
+        }
+
+        // Canvas Sizing Setup
+        function setupCanvases() {
+            const specRect = dom.spectrogramCanvas.parentElement.getBoundingClientRect();
+            dom.spectrogramCanvas.width = specRect.width;
+            dom.spectrogramCanvas.height = specRect.height;
+            specCanvasOffscreen.width = specRect.width;
+            specCanvasOffscreen.height = specRect.height;
+
+            const spectrumRect = dom.spectrumCanvas.parentElement.getBoundingClientRect();
+            dom.spectrumCanvas.width = spectrumRect.width;
+            dom.spectrumCanvas.height = spectrumRect.height;
+        }
+
+        window.addEventListener('resize', setupCanvases);
+
+        // Audio Engine Initialization
+        async function initAudioEngine() {
+            try {
+                const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+                state.audioCtx = new AudioContextClass();
+                await state.audioCtx.resume();
+
+                state.sampleRate = state.audioCtx.sampleRate;
+                dom.srDisplay.textContent = `SR: ${(state.sampleRate / 1000).toFixed(1)} kHz`;
+
+                // Request Microphone Access
+                state.micStream = await navigator.mediaDevices.getUserMedia({
+                    audio: {
+                        echoCancellation: false,
+                        noiseSuppression: false,
+                        autoGainControl: false
+                    }
+                });
+
+                // Create Audio Nodes
+                state.micSource = state.audioCtx.createMediaStreamSource(state.micStream);
+                state.analyserNode = state.audioCtx.createAnalyser();
+                state.analyserNode.fftSize = state.fftSize;
+                state.analyserNode.smoothingTimeConstant = 0.4;
+                state.micSource.connect(state.analyserNode);
+
+                // Setup Emitter Gain Node
+                state.gainNode = state.audioCtx.createGain();
+                state.gainNode.gain.setValueAtTime(0, state.audioCtx.currentTime);
+                state.gainNode.connect(state.audioCtx.destination);
+
+                state.isAudioRunning = true;
+                dom.contextState.textContent = 'RUNNING';
+                dom.contextState.className = 'text-xs font-mono text-emerald-400';
+                dom.statusBadgeText.textContent = 'Audio Active';
+                
+                dom.btnStart.disabled = true;
+                dom.btnStart.classList.add('opacity-50', 'cursor-not-allowed');
+                dom.btnStop.disabled = false;
+                dom.btnStop.classList.remove('text-slate-500', 'cursor-not-allowed', 'bg-slate-800');
+                dom.btnStop.classList.add('bg-rose-950', 'text-rose-300', 'hover:bg-rose-900', 'border', 'border-rose-800');
+
+                dom.btnToggleEmitter.disabled = false;
+                dom.btnToggleEmitter.classList.remove('text-slate-500', 'cursor-not-allowed', 'bg-slate-800');
+                dom.btnToggleEmitter.classList.add('bg-cyan-950', 'text-cyan-300', 'border', 'border-cyan-700/50', 'hover:bg-cyan-900');
+
+                logMsg(`Audio Engine started at ${state.sampleRate} Hz sample rate.`, 'emerald');
+                logMsg(`FFT Window: ${state.fftSize} bins (${(state.sampleRate / state.fftSize).toFixed(2)} Hz/bin resolution).`, 'cyan');
+
+                setupCanvases();
+                requestAnimationFrame(renderLoop);
+
+            } catch (err) {
+                logMsg(`Error starting audio engine: ${err.message}`, 'error');
+            }
+        }
+
+        // Stop Audio Engine
+        function stopAudioEngine() {
+            if (state.isEmitterActive) {
+                stopEmitter();
+            }
+            if (state.micStream) {
+                state.micStream.getTracks().forEach(track => track.stop());
+            }
+            if (state.audioCtx) {
+                state.audioCtx.close();
+            }
+
+            state.isAudioRunning = false;
+            dom.contextState.textContent = 'CLOSED';
+            dom.contextState.className = 'text-xs font-mono text-slate-500';
+            dom.statusBadgeText.textContent = 'Audio Engine Idle';
+
+            dom.btnStart.disabled = false;
+            dom.btnStart.classList.remove('opacity-50', 'cursor-not-allowed');
+            dom.btnStop.disabled = true;
+            dom.btnStop.className = 'px-4 py-2.5 bg-slate-800 text-slate-500 font-bold rounded-lg text-xs flex items-center justify-center gap-1.5 cursor-not-allowed';
+
+            dom.btnToggleEmitter.disabled = true;
+            dom.btnToggleEmitter.className = 'w-full py-2.5 bg-slate-800 text-slate-500 font-bold rounded-lg text-xs flex items-center justify-center gap-2 cursor-not-allowed';
+
+            logMsg('Audio Engine stopped.', 'warn');
+        }
+
+        // Emitter Functions
+        function startEmitter() {
+            if (!state.audioCtx || state.isEmitterActive) return;
+
+            if (state.emitterMode === 'tone') {
+                state.oscillatorNode = state.audioCtx.createOscillator();
+                state.oscillatorNode.type = 'sine';
+                state.oscillatorNode.frequency.setValueAtTime(state.targetFreq, state.audioCtx.currentTime);
+                state.oscillatorNode.connect(state.gainNode);
+                
+                state.gainNode.gain.cancelScheduledValues(state.audioCtx.currentTime);
+                state.gainNode.gain.setValueAtTime(state.targetGain, state.audioCtx.currentTime);
+
+                state.oscillatorNode.start();
+                logMsg(`Continuous emitter turned ON at ${state.targetFreq} Hz.`, 'cyan');
+            } else if (state.emitterMode === 'chirp') {
+                runChirpPing();
+                state.chirpTimer = setInterval(runChirpPing, 600);
+                logMsg('Sonar Chirp mode activated (18.0 kHz -> 22.0 kHz sweep).', 'cyan');
+            }
+
+            state.isEmitterActive = true;
+            dom.emitterBadge.textContent = 'ACTIVE';
+            dom.emitterBadge.className = 'text-xs px-2 py-0.5 rounded bg-cyan-950 text-cyan-300 border border-cyan-500/50 font-mono';
+        }
+
+        function runChirpPing() {
+            if (!state.audioCtx) return;
+            const osc = state.audioCtx.createOscillator();
+            const now = state.audioCtx.currentTime;
+
+            osc.type = 'sine';
+            osc.frequency.setValueAtTime(18000, now);
+            osc.frequency.exponentialRampToValueAtTime(22000, now + 0.15);
+
+            state.gainNode.gain.cancelScheduledValues(now);
+            state.gainNode.gain.setValueAtTime(state.targetGain, now);
+            state.gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.18);
+
+            osc.connect(state.gainNode);
+            osc.start(now);
+            osc.stop(now + 0.2);
+        }
+
+        function stopEmitter() {
+            if (state.oscillatorNode) {
+                try {
+                    state.oscillatorNode.stop();
+                    state.oscillatorNode.disconnect();
+                } catch (e) {}
+                state.oscillatorNode = null;
+            }
+            if (state.chirpTimer) {
+                clearInterval(state.chirpTimer);
+                state.chirpTimer = null;
+            }
+
+            state.isEmitterActive = false;
+            dom.emitterBadge.textContent = 'OFF';
+            dom.emitterBadge.className = 'text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-500 border border-slate-700 font-mono';
+            logMsg('Emitter turned OFF.', 'warn');
+        }
+
+        // Render Loop for Spectrogram, Spectrum, and Micro-Doppler Sensing
+        function renderLoop() {
+            if (!state.isAudioRunning) return;
+
+            const bufferLength = state.analyserNode.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            state.analyserNode.getByteFrequencyData(dataArray);
+
+            const hzPerBin = state.sampleRate / state.fftSize;
+
+            // Bins for 18 kHz to 22 kHz range
+            const minBin = Math.floor(18000 / hzPerBin);
+            const maxBin = Math.floor(22000 / hzPerBin);
+            const targetBin = Math.floor(state.targetFreq / hzPerBin);
+
+            // 1. Draw Spectrogram (Waterfall)
+            const w = dom.spectrogramCanvas.width;
+            const h = dom.spectrogramCanvas.height;
+
+            // Shift existing spectrogram image left by 2 pixels
+            specCtxOffscreen.drawImage(dom.spectrogramCanvas, 0, 0);
+            specCtx.drawImage(specCanvasOffscreen, -2, 0);
+
+            // Draw new vertical slice on the right edge
+            const rangeBins = maxBin - minBin;
+            const binHeight = h / rangeBins;
+
+            for (let i = 0; i < rangeBins; i++) {
+                const binIndex = minBin + i;
+                const value = dataArray[binIndex];
+                
+                // Cyan/emerald cyber heatmap palette
+                let r = 0, g = 0, b = 0;
+                if (value > 0) {
+                    r = Math.min(255, value * 1.5);
+                    g = Math.min(255, value * 2.0);
+                    b = Math.min(255, 128 + value * 1.2);
+                }
+
+                specCtx.fillStyle = `rgb(${r},${g},${b})`;
+                // Render with inverted y-axis (higher frequency at top)
+                specCtx.fillRect(w - 2, h - (i * binHeight), 2, binHeight);
+            }
+
+            // 2. Render Live High-Frequency Spectrum Bar Graph
+            const specW = dom.spectrumCanvas.width;
+            const specH = dom.spectrumCanvas.height;
+            spectBarCtx.clearRect(0, 0, specW, specH);
+
+            const barWidth = specW / rangeBins;
+            let peakVal = 0;
+            let peakBinIndex = minBin;
+
+            for (let i = 0; i < rangeBins; i++) {
+                const binIndex = minBin + i;
+                const val = dataArray[binIndex];
+
+                if (val > peakVal) {
+                    peakVal = val;
+                    peakBinIndex = binIndex;
+                }
+
+                const barHeight = (val / 255) * specH;
+                const x = i * barWidth;
+
+                // Color carrier frequency target bin differently
+                if (Math.abs(binIndex - targetBin) <= 1 && state.isEmitterActive) {
+                    spectBarCtx.fillStyle = '#06b6d4'; // Cyan
+                } else {
+                    spectBarCtx.fillStyle = '#10b981'; // Emerald
+                }
+
+                spectBarCtx.fillRect(x, specH - barHeight, barWidth - 1, barHeight);
+            }
+
+            const peakHz = Math.round(peakBinIndex * hzPerBin);
+            dom.peakFreqReadout.textContent = `Peak: ${peakHz.toLocaleString()} Hz`;
+
+            // 3. Micro-Doppler Motion Sensing Algorithm
+            if (state.isEmitterActive && state.emitterMode === 'tone') {
+                const sidebandBins = 6;
+                let lowerBandEnergy = 0;
+                let upperBandEnergy = 0;
+
+                for (let k = 1; k <= sidebandBins; k++) {
+                    lowerBandEnergy += dataArray[targetBin - k] || 0;
+                    upperBandEnergy += dataArray[targetBin + k] || 0;
+                }
+
+                const totalSidebandEnergy = (lowerBandEnergy + upperBandEnergy) / (sidebandBins * 2);
+                const diff = upperBandEnergy - lowerBandEnergy;
+
+                // Smooth energy value
+                const energyNorm = Math.min(100, (totalSidebandEnergy / 255) * 100 * 2);
+                dom.dopplerEnergyBar.style.width = `${energyNorm}%`;
+                dom.dopplerEnergyText.textContent = `${(totalSidebandEnergy / 10).toFixed(2)} dB`;
+
+                if (totalSidebandEnergy > 15) {
+                    dom.dopplerStatus.textContent = 'MOTION DETECTED';
+                    dom.dopplerStatus.className = 'text-xs px-2 py-0.5 rounded bg-emerald-950 text-emerald-300 border border-emerald-500/50 font-mono';
+
+                    if (diff > 12) {
+                        dom.dopplerDirection.textContent = 'APPROACHING ▲';
+                        dom.dopplerDirection.className = 'text-xs font-mono font-bold text-cyan-400 text-glow-cyan';
+                        dom.dopplerShiftHz.textContent = `+${Math.round(hzPerBin * 2)} Hz`;
+                    } else if (diff < -12) {
+                        dom.dopplerDirection.textContent = 'RECEDING ▼';
+                        dom.dopplerDirection.className = 'text-xs font-mono font-bold text-amber-400';
+                        dom.dopplerShiftHz.textContent = `-${Math.round(hzPerBin * 2)} Hz`;
+                    } else {
+                        dom.dopplerDirection.textContent = 'IN-PLACE PERTURBATION';
+                        dom.dopplerDirection.className = 'text-xs font-mono font-bold text-emerald-400';
+                        dom.dopplerShiftHz.textContent = '±0 Hz';
+                    }
+                } else {
+                    dom.dopplerStatus.textContent = 'STANDBY';
+                    dom.dopplerStatus.className = 'text-xs px-2 py-0.5 rounded bg-slate-800 text-slate-500 font-mono';
+                    dom.dopplerDirection.textContent = '--';
+                    dom.dopplerDirection.className = 'text-xs font-mono font-bold text-slate-400';
+                    dom.dopplerShiftHz.textContent = '0 Hz';
+                }
+            }
+
+            requestAnimationFrame(renderLoop);
+        }
+
+        // Event Listeners Setup
+        dom.btnStart.addEventListener('click', initAudioEngine);
+        dom.btnStop.addEventListener('click', stopAudioEngine);
+
+        dom.btnToggleEmitter.addEventListener('click', () => {
+            if (state.isEmitterActive) {
+                stopEmitter();
+            } else {
+                startEmitter();
+            }
+        });
+
+        dom.freqSlider.addEventListener('input', (e) => {
+            state.targetFreq = parseFloat(e.target.value);
+            dom.freqDisplay.textContent = `${state.targetFreq.toLocaleString()} Hz`;
+            if (state.oscillatorNode && state.audioCtx) {
+                state.oscillatorNode.frequency.setValueAtTime(state.targetFreq, state.audioCtx.currentTime);
+            }
+        });
+
+        dom.gainSlider.addEventListener('input', (e) => {
+            state.targetGain = parseFloat(e.target.value) / 100;
+            dom.gainDisplay.textContent = `${e.target.value}%`;
+            if (state.gainNode && state.audioCtx && state.isEmitterActive && state.emitterMode === 'tone') {
+                state.gainNode.gain.setValueAtTime(state.targetGain, state.audioCtx.currentTime);
+            }
+        });
+
+        dom.btnModeTone.addEventListener('click', () => {
+            state.emitterMode = 'tone';
+            dom.btnModeTone.className = 'py-2 bg-cyan-950 border border-cyan-500/50 text-cyan-300 text-xs font-medium rounded-lg text-center font-mono';
+            dom.btnModeChirp.className = 'py-2 bg-slate-800 border border-slate-700 text-slate-400 text-xs font-medium rounded-lg text-center font-mono hover:border-slate-600';
+            if (state.isEmitterActive) {
+                stopEmitter();
+                startEmitter();
+            }
+        });
+
+        dom.btnModeChirp.addEventListener('click', () => {
+            state.emitterMode = 'chirp';
+            dom.btnModeChirp.className = 'py-2 bg-cyan-950 border border-cyan-500/50 text-cyan-300 text-xs font-medium rounded-lg text-center font-mono';
+            dom.btnModeTone.className = 'py-2 bg-slate-800 border border-slate-700 text-slate-400 text-xs font-medium rounded-lg text-center font-mono hover:border-slate-600';
+            if (state.isEmitterActive) {
+                stopEmitter();
+                startEmitter();
+            }
+        });
+    </script>
+</body>
+</html>
